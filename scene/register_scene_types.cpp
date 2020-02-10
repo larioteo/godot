@@ -194,13 +194,11 @@
 #include "scene/3d/path.h"
 #include "scene/3d/physics_body.h"
 #include "scene/3d/physics_joint.h"
-#include "scene/3d/portal.h"
 #include "scene/3d/position_3d.h"
 #include "scene/3d/proximity_group.h"
 #include "scene/3d/ray_cast.h"
 #include "scene/3d/reflection_probe.h"
 #include "scene/3d/remote_transform.h"
-#include "scene/3d/room_instance.h"
 #include "scene/3d/skeleton.h"
 #include "scene/3d/soft_body.h"
 #include "scene/3d/spring_arm.h"
@@ -751,7 +749,7 @@ void register_scene_types() {
 	if (font_path != String()) {
 		font = ResourceLoader::load(font_path);
 		if (!font.is_valid()) {
-			ERR_PRINTS("Error loading custom font '" + font_path + "'");
+			ERR_PRINT("Error loading custom font '" + font_path + "'");
 		}
 	}
 
@@ -766,7 +764,7 @@ void register_scene_types() {
 				Theme::set_default_font(font);
 			}
 		} else {
-			ERR_PRINTS("Error loading custom theme '" + theme_path + "'");
+			ERR_PRINT("Error loading custom theme '" + theme_path + "'");
 		}
 	}
 }

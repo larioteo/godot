@@ -53,6 +53,11 @@
 #endif
 #endif
 
+#if !defined(GLES_OVER_GL)
+#define GL_TEXTURE_2D_ARRAY 0x8C1A
+#define GL_TEXTURE_3D 0x806F
+#endif
+
 static const GLenum _cube_side_enum[6] = {
 
 	GL_TEXTURE_CUBE_MAP_NEGATIVE_X,
@@ -557,15 +562,16 @@ bool RasterizerSceneGLES2::reflection_probe_instance_begin_render(RID p_instance
 
 		glGenTextures(1, &rpi->cubemap);
 		glBindTexture(GL_TEXTURE_CUBE_MAP, rpi->cubemap);
-#if 1
-		//Mobile hardware (PowerVR specially) prefers this approach, the other one kills the game
+
+		// Mobile hardware (PowerVR specially) prefers this approach,
+		// the previous approach with manual lod levels kills the game.
 		for (int i = 0; i < 6; i++) {
 			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, internal_format, size, size, 0, format, type, NULL);
 		}
 
 		glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
 
-		//Generate framebuffers for rendering
+		// Generate framebuffers for rendering
 		for (int i = 0; i < 6; i++) {
 			glBindFramebuffer(GL_FRAMEBUFFER, rpi->fbo[i]);
 			glBindTexture(GL_TEXTURE_2D, rpi->color[i]);
@@ -576,34 +582,6 @@ bool RasterizerSceneGLES2::reflection_probe_instance_begin_render(RID p_instance
 			ERR_CONTINUE(status != GL_FRAMEBUFFER_COMPLETE);
 		}
 
-#else
-		int lod = 0;
-
-		//the approach below is fatal for powervr
-
-		// Set the initial (empty) mipmaps, all need to be set for this to work in GLES2, even if they won't be used later.
-		while (size >= 1) {
-
-			for (int i = 0; i < 6; i++) {
-				glTexImage2D(_cube_side_enum[i], lod, internal_format, size, size, 0, format, type, NULL);
-				if (size == rpi->current_resolution) {
-					//adjust framebuffer
-					glBindFramebuffer(GL_FRAMEBUFFER, rpi->fbo[i]);
-					glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, _cube_side_enum[i], rpi->cubemap, 0);
-					glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rpi->depth);
-
-#ifdef DEBUG_ENABLED
-					GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-					ERR_CONTINUE(status != GL_FRAMEBUFFER_COMPLETE);
-#endif
-				}
-			}
-
-			lod++;
-
-			size >>= 1;
-		}
-#endif
 		glTexParameterf(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 		glTexParameterf(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameterf(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -1370,6 +1348,7 @@ bool RasterizerSceneGLES2::_setup_material(RasterizerStorageGLES2::Material *p_m
 	const Pair<StringName, RID> *textures = p_material->textures.ptr();
 
 	const ShaderLanguage::ShaderNode::Uniform::Hint *texture_hints = p_material->shader->texture_hints.ptr();
+	const ShaderLanguage::DataType *texture_types = p_material->shader->texture_types.ptr();
 
 	state.scene_shader.set_uniform(SceneShaderGLES2::SKELETON_TEXTURE_SIZE, p_skeleton_tex_size);
 
@@ -1383,22 +1362,66 @@ bool RasterizerSceneGLES2::_setup_material(RasterizerStorageGLES2::Material *p_m
 
 		if (!t) {
 
-			switch (texture_hints[i]) {
-				case ShaderLanguage::ShaderNode::Uniform::HINT_BLACK_ALBEDO:
-				case ShaderLanguage::ShaderNode::Uniform::HINT_BLACK: {
-					glBindTexture(GL_TEXTURE_2D, storage->resources.black_tex);
+			GLenum target = GL_TEXTURE_2D;
+			GLuint tex = 0;
+			switch (texture_types[i]) {
+				case ShaderLanguage::TYPE_ISAMPLER2D:
+				case ShaderLanguage::TYPE_USAMPLER2D:
+				case ShaderLanguage::TYPE_SAMPLER2D: {
+
+					switch (texture_hints[i]) {
+						case ShaderLanguage::ShaderNode::Uniform::HINT_BLACK_ALBEDO:
+						case ShaderLanguage::ShaderNode::Uniform::HINT_BLACK: {
+							tex = storage->resources.black_tex;
+						} break;
+						case ShaderLanguage::ShaderNode::Uniform::HINT_ANISO: {
+							tex = storage->resources.aniso_tex;
+						} break;
+						case ShaderLanguage::ShaderNode::Uniform::HINT_NORMAL: {
+							tex = storage->resources.normal_tex;
+						} break;
+						default: {
+							tex = storage->resources.white_tex;
+						} break;
+					}
+
 				} break;
-				case ShaderLanguage::ShaderNode::Uniform::HINT_ANISO: {
-					glBindTexture(GL_TEXTURE_2D, storage->resources.aniso_tex);
+
+				case ShaderLanguage::TYPE_SAMPLERCUBE: {
+					// TODO
 				} break;
-				case ShaderLanguage::ShaderNode::Uniform::HINT_NORMAL: {
-					glBindTexture(GL_TEXTURE_2D, storage->resources.normal_tex);
+
+				case ShaderLanguage::TYPE_ISAMPLER3D:
+				case ShaderLanguage::TYPE_USAMPLER3D:
+				case ShaderLanguage::TYPE_SAMPLER3D: {
+
+					target = GL_TEXTURE_3D;
+					tex = storage->resources.white_tex_3d;
+
+					//switch (texture_hints[i]) {
+					// TODO
+					//}
+
 				} break;
+
+				case ShaderLanguage::TYPE_ISAMPLER2DARRAY:
+				case ShaderLanguage::TYPE_USAMPLER2DARRAY:
+				case ShaderLanguage::TYPE_SAMPLER2DARRAY: {
+
+					target = GL_TEXTURE_2D_ARRAY;
+					tex = storage->resources.white_tex_array;
+
+					//switch (texture_hints[i]) {
+					// TODO
+					//}
+
+				} break;
+
 				default: {
-					glBindTexture(GL_TEXTURE_2D, storage->resources.white_tex);
-				} break;
+				}
 			}
 
+			glBindTexture(target, tex);
 			continue;
 		}
 
@@ -2685,14 +2708,14 @@ void RasterizerSceneGLES2::_draw_sky(RasterizerStorageGLES2::Sky *p_sky, const C
 	};
 
 	if (!asymmetrical) {
-		float vw, vh, zn;
-		camera.get_viewport_size(vw, vh);
+		Vector2 vp_he = camera.get_viewport_half_extents();
+		float zn;
 		zn = p_projection.get_z_near();
 
 		for (int i = 0; i < 4; i++) {
 			Vector3 uv = vertices[i * 2 + 1];
-			uv.x = (uv.x * 2.0 - 1.0) * vw;
-			uv.y = -(uv.y * 2.0 - 1.0) * vh;
+			uv.x = (uv.x * 2.0 - 1.0) * vp_he.x;
+			uv.y = -(uv.y * 2.0 - 1.0) * vp_he.y;
 			uv.z = -zn;
 			vertices[i * 2 + 1] = p_transform.basis.xform(uv).normalized();
 			vertices[i * 2 + 1].z = -vertices[i * 2 + 1].z;

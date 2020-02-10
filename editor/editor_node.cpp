@@ -1765,6 +1765,8 @@ void EditorNode::_edit_current() {
 		return;
 	}
 
+	Object *prev_inspected_object = get_inspector()->get_edited_object();
+
 	bool capitalize = bool(EDITOR_GET("interface/inspector/capitalize_properties"));
 	bool disable_folding = bool(EDITOR_GET("interface/inspector/disable_folding"));
 	bool is_resource = current_obj->is_class("Resource");
@@ -1854,6 +1856,11 @@ void EditorNode::_edit_current() {
 		node_dock->set_node(NULL);
 		scene_tree_dock->set_selected(selected_node);
 		inspector_dock->update(NULL);
+	}
+
+	if (current_obj == prev_inspected_object) {
+		// Make sure inspected properties are restored.
+		get_inspector()->update_tree();
 	}
 
 	inspector_dock->set_warning(editable_warning);
@@ -2725,7 +2732,7 @@ void EditorNode::_tool_menu_option(int p_idx) {
 				handler->call(callback, (const Variant **)&ud, 1, ce);
 				if (ce.error != Variant::CallError::CALL_OK) {
 					String err = Variant::get_call_error_text(handler, callback, (const Variant **)&ud, 1, ce);
-					ERR_PRINTS("Error calling function from tool menu: " + err);
+					ERR_PRINT("Error calling function from tool menu: " + err);
 				}
 			} // else it's a submenu so don't do anything.
 		} break;
@@ -3035,7 +3042,7 @@ void EditorNode::set_addon_plugin_enabled(const String &p_addon, bool p_enabled,
 		}
 		ps->set("editor_plugins/enabled", enabled_plugins);
 		ps->save();
-		WARN_PRINTS("Addon '" + p_addon + "' failed to load. No directory found. Removing from enabled plugins.");
+		WARN_PRINT("Addon '" + p_addon + "' failed to load. No directory found. Removing from enabled plugins.");
 		return;
 	}
 	Error err = cf->load(addon_path);
@@ -3981,7 +3988,7 @@ void EditorNode::show_warning(const String &p_text, const String &p_title) {
 		warning->set_title(p_title);
 		warning->popup_centered_minsize();
 	} else {
-		WARN_PRINTS(p_title + " " + p_text);
+		WARN_PRINT(p_title + " " + p_text);
 	}
 }
 

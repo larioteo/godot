@@ -106,7 +106,7 @@ Error CSharpLanguage::execute_file(const String &p_path) {
 void CSharpLanguage::init() {
 
 #ifdef DEBUG_METHODS_ENABLED
-	if (OS::get_singleton()->get_cmdline_args().find("--class_db_to_json")) {
+	if (OS::get_singleton()->get_cmdline_args().find("--class-db-json")) {
 		class_db_api_to_json("user://class_db_api.json", ClassDB::API_CORE);
 #ifdef TOOLS_ENABLED
 		class_db_api_to_json("user://class_db_api_editor.json", ClassDB::API_EDITOR);
@@ -160,14 +160,14 @@ void CSharpLanguage::finish() {
 	script_bindings.clear();
 
 #ifdef DEBUG_ENABLED
-	for (List<ObjectID>::Element *E = unsafely_referenced_objects.front(); E; E = E->next()) {
+	for (Map<ObjectID, int>::Element *E = unsafe_object_references.front(); E; E = E->next()) {
 		const ObjectID &id = E->get();
 		Object *obj = ObjectDB::get_instance(id);
 
 		if (obj) {
-			ERR_PRINTS("Leaked unsafe reference to object: " + obj->get_class() + ":" + itos(id));
+			ERR_PRINT("Leaked unsafe reference to object: " + obj->get_class() + ":" + itos(id));
 		} else {
-			ERR_PRINTS("Leaked unsafe reference to deleted object: " + itos(id));
+			ERR_PRINT("Leaked unsafe reference to deleted object: " + itos(id));
 		}
 	}
 #endif
@@ -632,18 +632,20 @@ Vector<ScriptLanguage::StackInfo> CSharpLanguage::stack_trace_get_info(MonoObjec
 
 void CSharpLanguage::post_unsafe_reference(Object *p_obj) {
 #ifdef DEBUG_ENABLED
+	SCOPED_MUTEX_LOCK(unsafe_object_references_lock);
 	ObjectID id = p_obj->get_instance_id();
-	ERR_FAIL_COND_MSG(unsafely_referenced_objects.find(id), "Multiple unsafe references for object: " + p_obj->get_class() + ":" + itos(id));
-	unsafely_referenced_objects.push_back(id);
+	unsafe_object_references[id]++;
 #endif
 }
 
 void CSharpLanguage::pre_unsafe_unreference(Object *p_obj) {
 #ifdef DEBUG_ENABLED
+	SCOPED_MUTEX_LOCK(unsafe_object_references_lock);
 	ObjectID id = p_obj->get_instance_id();
-	List<ObjectID>::Element *elem = unsafely_referenced_objects.find(id);
+	Map<ObjectID, int>::Element *elem = unsafe_object_references.find(id);
 	ERR_FAIL_NULL(elem);
-	unsafely_referenced_objects.erase(elem);
+	if (--elem->value() == 0)
+		unsafe_object_references.erase(elem);
 #endif
 }
 
@@ -1078,7 +1080,7 @@ void CSharpLanguage::_load_scripts_metadata() {
 		int err_line;
 		Error json_err = JSON::parse(old_json, old_dict_var, err_str, err_line);
 		if (json_err != OK) {
-			ERR_PRINTS("Failed to parse metadata file: '" + err_str + "' (" + String::num_int64(err_line) + ").");
+			ERR_PRINT("Failed to parse metadata file: '" + err_str + "' (" + String::num_int64(err_line) + ").");
 			return;
 		}
 
@@ -1246,6 +1248,14 @@ CSharpLanguage::CSharpLanguage() {
 	language_bind_mutex = Mutex::create();
 #endif
 
+#ifdef DEBUG_ENABLED
+#ifdef NO_THREADS
+	unsafe_object_references_lock = NULL;
+#else
+	unsafe_object_references_lock = Mutex::create();
+#endif
+#endif
+
 	lang_idx = -1;
 
 	scripts_metadata_invalidated = true;
@@ -1273,6 +1283,13 @@ CSharpLanguage::~CSharpLanguage() {
 		memdelete(script_gchandle_release_mutex);
 		script_gchandle_release_mutex = NULL;
 	}
+
+#ifdef DEBUG_ENABLED
+	if (unsafe_object_references_lock) {
+		memdelete(unsafe_object_references_lock);
+		unsafe_object_references_lock = NULL;
+	}
+#endif
 
 	singleton = NULL;
 }
@@ -1704,8 +1721,7 @@ bool CSharpInstance::has_method(const StringName &p_method) const {
 
 Variant CSharpInstance::call(const StringName &p_method, const Variant **p_args, int p_argcount, Variant::CallError &r_error) {
 
-	if (!script.is_valid())
-		ERR_FAIL_V(Variant());
+	ERR_FAIL_COND_V(!script.is_valid(), Variant());
 
 	GD_MONO_SCOPE_THREAD_ATTACH;
 
@@ -2408,6 +2424,9 @@ bool CSharpScript::_update_exports() {
 			top = top->get_parent_class();
 		}
 
+		// Need to check this here, before disposal
+		bool base_ref = Object::cast_to<Reference>(tmp_native) != NULL;
+
 		// Dispose the temporary managed instance
 
 		MonoException *exc = NULL;
@@ -2421,10 +2440,10 @@ bool CSharpScript::_update_exports() {
 		MonoGCHandle::free_handle(tmp_pinned_gchandle);
 		tmp_object = NULL;
 
-		if (tmp_native && !Object::cast_to<Reference>(tmp_native)) {
+		if (tmp_native && !base_ref) {
 			Node *node = Object::cast_to<Node>(tmp_native);
 			if (node && node->is_inside_tree()) {
-				ERR_PRINTS("Temporary instance was added to the scene tree.");
+				ERR_PRINT("Temporary instance was added to the scene tree.");
 			} else {
 				memdelete(tmp_native);
 			}
@@ -2502,7 +2521,7 @@ bool CSharpScript::_get_signal(GDMonoClass *p_class, GDMonoClass *p_delegate, Ve
 					arg.type = GDMonoMarshal::managed_to_variant_type(types[i]);
 
 					if (arg.type == Variant::NIL) {
-						ERR_PRINTS("Unknown type of signal parameter: '" + arg.name + "' in '" + p_class->get_full_name() + "'.");
+						ERR_PRINT("Unknown type of signal parameter: '" + arg.name + "' in '" + p_class->get_full_name() + "'.");
 						return false;
 					}
 
@@ -2532,7 +2551,7 @@ bool CSharpScript::_get_member_export(IMonoClassMember *p_member, bool p_inspect
 
 	if (p_member->is_static()) {
 		if (p_member->has_attribute(CACHED_CLASS(ExportAttribute)))
-			ERR_PRINTS("Cannot export member because it is static: '" + MEMBER_FULL_QUALIFIED_NAME(p_member) + "'.");
+			ERR_PRINT("Cannot export member because it is static: '" + MEMBER_FULL_QUALIFIED_NAME(p_member) + "'.");
 		return false;
 	}
 
@@ -2555,12 +2574,12 @@ bool CSharpScript::_get_member_export(IMonoClassMember *p_member, bool p_inspect
 		GDMonoProperty *property = static_cast<GDMonoProperty *>(p_member);
 		if (!property->has_getter()) {
 			if (exported)
-				ERR_PRINTS("Read-only property cannot be exported: '" + MEMBER_FULL_QUALIFIED_NAME(p_member) + "'.");
+				ERR_PRINT("Read-only property cannot be exported: '" + MEMBER_FULL_QUALIFIED_NAME(p_member) + "'.");
 			return false;
 		}
 		if (!property->has_setter()) {
 			if (exported)
-				ERR_PRINTS("Write-only property (without getter) cannot be exported: '" + MEMBER_FULL_QUALIFIED_NAME(p_member) + "'.");
+				ERR_PRINT("Write-only property (without getter) cannot be exported: '" + MEMBER_FULL_QUALIFIED_NAME(p_member) + "'.");
 			return false;
 		}
 	}
@@ -2579,7 +2598,7 @@ bool CSharpScript::_get_member_export(IMonoClassMember *p_member, bool p_inspect
 	String hint_string;
 
 	if (variant_type == Variant::NIL) {
-		ERR_PRINTS("Unknown exported member type: '" + MEMBER_FULL_QUALIFIED_NAME(p_member) + "'.");
+		ERR_PRINT("Unknown exported member type: '" + MEMBER_FULL_QUALIFIED_NAME(p_member) + "'.");
 		return false;
 	}
 
@@ -2871,7 +2890,7 @@ bool CSharpScript::can_instance() const {
 						"Compile",
 						ProjectSettings::get_singleton()->globalize_path(get_path()));
 			} else {
-				ERR_PRINTS("C# project could not be created; cannot add file: '" + get_path() + "'.");
+				ERR_PRINT("C# project could not be created; cannot add file: '" + get_path() + "'.");
 			}
 		}
 	}
@@ -3417,7 +3436,7 @@ Error ResourceFormatSaverCSharpScript::save(const String &p_path, const RES &p_r
 					"Compile",
 					ProjectSettings::get_singleton()->globalize_path(p_path));
 		} else {
-			ERR_PRINTS("C# project could not be created; cannot add file: '" + p_path + "'.");
+			ERR_PRINT("C# project could not be created; cannot add file: '" + p_path + "'.");
 		}
 	}
 #endif

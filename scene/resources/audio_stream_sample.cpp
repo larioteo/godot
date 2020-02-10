@@ -29,6 +29,7 @@
 /*************************************************************************/
 
 #include "audio_stream_sample.h"
+
 #include "core/io/marshalls.h"
 #include "core/os/file_access.h"
 
@@ -518,7 +519,7 @@ PoolVector<uint8_t> AudioStreamSample::get_data() const {
 
 Error AudioStreamSample::save_to_wav(const String &p_path) {
 	if (format == AudioStreamSample::FORMAT_IMA_ADPCM) {
-		WARN_PRINTS("Saving IMA_ADPC samples are not supported yet");
+		WARN_PRINT("Saving IMA_ADPC samples are not supported yet");
 		return ERR_UNAVAILABLE;
 	}
 
@@ -656,8 +657,8 @@ AudioStreamSample::AudioStreamSample() {
 	data = NULL;
 	data_bytes = 0;
 }
-AudioStreamSample::~AudioStreamSample() {
 
+AudioStreamSample::~AudioStreamSample() {
 	if (data) {
 		AudioServer::get_singleton()->audio_data_free(data);
 		data = NULL;
