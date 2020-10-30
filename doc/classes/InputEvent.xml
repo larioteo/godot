@@ -7,8 +7,10 @@
 		Base class of all sort of input event. See [method Node._input].
 	</description>
 	<tutorials>
-		<link>https://docs.godotengine.org/en/latest/tutorials/inputs/inputevent.html</link>
-		<link>https://docs.godotengine.org/en/latest/tutorials/2d/2d_transforms.html</link>
+		<link title="InputEvent">https://docs.godotengine.org/en/latest/tutorials/inputs/inputevent.html</link>
+		<link title="Viewport and canvas transforms">https://docs.godotengine.org/en/latest/tutorials/2d/2d_transforms.html</link>
+		<link title="2D Dodge The Creeps Demo">https://godotengine.org/asset-library/asset/515</link>
+		<link title="3D Voxel Demo">https://godotengine.org/asset-library/asset/676</link>
 	</tutorials>
 	<methods>
 		<method name="accumulate">
@@ -31,7 +33,7 @@
 		<method name="get_action_strength" qualifiers="const">
 			<return type="float">
 			</return>
-			<argument index="0" name="action" type="String">
+			<argument index="0" name="action" type="StringName">
 			</argument>
 			<description>
 				Returns a value between 0.0 and 1.0 depending on the given actions' state. Useful for getting the value of events of type [InputEventJoypadMotion].
@@ -40,7 +42,7 @@
 		<method name="is_action" qualifiers="const">
 			<return type="bool">
 			</return>
-			<argument index="0" name="action" type="String">
+			<argument index="0" name="action" type="StringName">
 			</argument>
 			<description>
 				Returns [code]true[/code] if this input event matches a pre-defined action of any type.
@@ -49,7 +51,7 @@
 		<method name="is_action_pressed" qualifiers="const">
 			<return type="bool">
 			</return>
-			<argument index="0" name="action" type="String">
+			<argument index="0" name="action" type="StringName">
 			</argument>
 			<argument index="1" name="allow_echo" type="bool" default="false">
 			</argument>
@@ -60,7 +62,7 @@
 		<method name="is_action_released" qualifiers="const">
 			<return type="bool">
 			</return>
-			<argument index="0" name="action" type="String">
+			<argument index="0" name="action" type="StringName">
 			</argument>
 			<description>
 				Returns [code]true[/code] if the given action is released (i.e. not pressed). Not relevant for events of type [InputEventMouseMotion] or [InputEventScreenDrag].

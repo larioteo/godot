@@ -31,16 +31,16 @@
 #ifndef RANDOM_PCG_H
 #define RANDOM_PCG_H
 
-#include <math.h>
-
 #include "core/math/math_defs.h"
 
 #include "thirdparty/misc/pcg.h"
 
-#if defined(__GNUC__) || (_llvm_has_builtin(__builtin_clz))
+#include <math.h>
+
+#if defined(__GNUC__)
 #define CLZ32(x) __builtin_clz(x)
 #elif defined(_MSC_VER)
-#include "intrin.h"
+#include <intrin.h>
 static int __bsr_clz32(uint32_t x) {
 	unsigned long index;
 	_BitScanReverse(&index, x);
@@ -50,11 +50,11 @@ static int __bsr_clz32(uint32_t x) {
 #else
 #endif
 
-#if defined(__GNUC__) || (_llvm_has_builtin(__builtin_ldexp) && _llvm_has_builtin(__builtin_ldexpf))
+#if defined(__GNUC__)
 #define LDEXP(s, e) __builtin_ldexp(s, e)
 #define LDEXPF(s, e) __builtin_ldexpf(s, e)
 #else
-#include "math.h"
+#include <math.h>
 #define LDEXP(s, e) ldexp(s, e)
 #define LDEXPF(s, e) ldexp(s, e)
 #endif
@@ -67,7 +67,6 @@ class RandomPCG {
 public:
 	static const uint64_t DEFAULT_SEED = 12047754176567800795U;
 	static const uint64_t DEFAULT_INC = PCG_DEFAULT_INC_64;
-	static const uint64_t RANDOM_MAX = 0xFFFFFFFF;
 
 	RandomPCG(uint64_t p_seed = DEFAULT_SEED, uint64_t p_inc = DEFAULT_INC);
 
@@ -81,6 +80,10 @@ public:
 	_FORCE_INLINE_ uint32_t rand() {
 		current_seed = pcg.state;
 		return pcg32_random_r(&pcg);
+	}
+	_FORCE_INLINE_ uint32_t rand(uint32_t bounds) {
+		current_seed = pcg.state;
+		return pcg32_boundedrand_r(&pcg, bounds);
 	}
 
 	// Obtaining floating point numbers in [0, 1] range with "good enough" uniformity.

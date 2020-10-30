@@ -28,13 +28,12 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                */
 /*************************************************************************/
 
-#ifndef TEXTURE_FRAME_H
-#define TEXTURE_FRAME_H
+#ifndef TEXTURE_RECT_H
+#define TEXTURE_RECT_H
 
 #include "scene/gui/control.h"
 
 class TextureRect : public Control {
-
 	GDCLASS(TextureRect, Control);
 
 public:
@@ -53,19 +52,19 @@ private:
 	bool expand;
 	bool hflip;
 	bool vflip;
-	Ref<Texture> texture;
+	Ref<Texture2D> texture;
 	StretchMode stretch_mode;
 
 	void _texture_changed();
 
 protected:
 	void _notification(int p_what);
-	virtual Size2 get_minimum_size() const;
+	virtual Size2 get_minimum_size() const override;
 	static void _bind_methods();
 
 public:
-	void set_texture(const Ref<Texture> &p_tex);
-	Ref<Texture> get_texture() const;
+	void set_texture(const Ref<Texture2D> &p_tex);
+	Ref<Texture2D> get_texture() const;
 
 	void set_expand(bool p_expand);
 	bool has_expand() const;
@@ -84,4 +83,5 @@ public:
 };
 
 VARIANT_ENUM_CAST(TextureRect::StretchMode);
-#endif // TEXTURE_FRAME_H
+
+#endif // TEXTURE_RECT_H
